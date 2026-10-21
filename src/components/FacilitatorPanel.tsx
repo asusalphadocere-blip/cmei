@@ -31,6 +31,7 @@ import {
   banAuthor,
   unbanAuthor,
   setVotingStatus,
+  setActivePhase,
 } from '../lib/firebase.ts';
 
 interface FacilitatorPanelProps {
@@ -132,6 +133,18 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
       await setVotingStatus(!settings.votingOpen);
     } catch (err) {
       console.error('Error al cambiar estado de votación:', err);
+    }
+  };
+
+  const handleSelectPhase = async (
+    phase: 'all' | 'diagnostico' | 'priorizacion' | 'ideacion' | 'seguimiento'
+  ) => {
+    setActiveFilter(phase);
+    const targetPhase = phase === 'all' ? 'libre' : phase;
+    try {
+      await setActivePhase(targetPhase);
+    } catch (err) {
+      console.error('Error al actualizar fase en Firebase:', err);
     }
   };
 
@@ -391,9 +404,9 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
               <span className="font-semibold text-slate-300">Fase del taller:</span>
             </div>
 
-            <div className="flex items-center gap-1 ml-2">
+            <div className="flex items-center gap-1.5 ml-2">
               <button
-                onClick={() => setActiveFilter('all')}
+                onClick={() => handleSelectPhase('all')}
                 className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   activeFilter === 'all'
                     ? 'bg-cyan-500 text-slate-950 font-bold'
@@ -403,44 +416,48 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
                 Tablero Completo
               </button>
               <button
-                onClick={() => setActiveFilter('diagnostico')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                onClick={() => handleSelectPhase('diagnostico')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
                   activeFilter === 'diagnostico'
-                    ? 'bg-cyan-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:bg-white/10'
+                    ? 'bg-violet-600 text-white font-black shadow-xs'
+                    : 'text-violet-200 hover:bg-violet-900/40'
                 }`}
+                title="Mapear Intereses, Habilidades, Recursos y Barreras"
               >
-                1. Diagnóstico (Col. 1-4)
+                <span>Momento 1: Diagnóstico (Col. 1-4)</span>
               </button>
               <button
-                onClick={() => setActiveFilter('priorizacion')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                onClick={() => handleSelectPhase('priorizacion')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
                   activeFilter === 'priorizacion'
-                    ? 'bg-cyan-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:bg-white/10'
+                    ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
+                    : 'text-amber-200 hover:bg-amber-900/40'
                 }`}
+                title="Votación de prioridades antes de pasar a la ideatón"
               >
-                2. Priorización (Votos)
+                <span>★ Priorización (Votos)</span>
               </button>
               <button
-                onClick={() => setActiveFilter('ideacion')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                onClick={() => handleSelectPhase('ideacion')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
                   activeFilter === 'ideacion'
-                    ? 'bg-cyan-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:bg-white/10'
+                    ? 'bg-cyan-400 text-slate-950 font-black shadow-xs'
+                    : 'text-cyan-200 hover:bg-cyan-900/40'
                 }`}
+                title="Probar algo pequeño (Idea, Prueba, Aprender)"
               >
-                3. Probar algo pequeño
+                <span>Momento 2: Ideatón (3 col)</span>
               </button>
               <button
-                onClick={() => setActiveFilter('seguimiento')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                onClick={() => handleSelectPhase('seguimiento')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
                   activeFilter === 'seguimiento'
-                    ? 'bg-cyan-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:bg-white/10'
+                    ? 'bg-emerald-400 text-slate-950 font-black shadow-xs'
+                    : 'text-emerald-200 hover:bg-emerald-900/40'
                 }`}
+                title="Compromisos y próximos pasos voluntarios"
               >
-                4. Seguir conectadas
+                <span>Seguir conectadas</span>
               </button>
             </div>
           </div>

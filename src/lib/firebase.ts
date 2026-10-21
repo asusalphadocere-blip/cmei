@@ -112,8 +112,20 @@ export function subscribeSettings(onData: (settings: BoardSettings) => void): Un
     onData({
       votingOpen: data.votingOpen !== false, // abierta por defecto
       bannedAuthors: data.bannedAuthors || {},
+      activePhase: data.activePhase || 'diagnostico',
     });
   });
+}
+
+/**
+ * Actualiza la fase activa del taller para guiar a todos los participantes en tiempo real
+ */
+export async function setActivePhase(
+  phase: 'diagnostico' | 'priorizacion' | 'ideacion' | 'seguimiento' | 'libre'
+): Promise<void> {
+  const db = getDb();
+  const phaseRef = ref(db, 'settings/activePhase');
+  await set(phaseRef, phase);
 }
 
 /**
@@ -244,6 +256,24 @@ export async function deleteNote(noteId: string): Promise<void> {
 }
 
 /**
+ * Sanitiza una nota para Firebase eliminando campos undefined
+ */
+export function cleanNoteForStorage(n: Note): Record<string, any> {
+  const item: Record<string, any> = {
+    id: String(n.id || ''),
+    sec: String(n.sec || 'sec1'),
+    text: String(n.text || '').slice(0, 280),
+    ts: typeof n.ts === 'number' ? n.ts : Date.now(),
+    votes: typeof n.votes === 'number' ? n.votes : 0,
+    hidden: Boolean(n.hidden),
+  };
+  if (n.authorId && typeof n.authorId === 'string' && n.authorId.trim()) {
+    item.authorId = n.authorId.trim();
+  }
+  return item;
+}
+
+/**
  * Archiva la sesión actual completa a la lista de históricos y limpia el tablero activo
  */
 export async function archiveCurrentSession(
@@ -254,15 +284,23 @@ export async function archiveCurrentSession(
   const historyRef = ref(db, 'history');
   const newSessionRef = push(historyRef);
 
-  const totalVotes = currentNotes.reduce((sum, n) => sum + (n.votes || 0), 0);
+  const cleanNotesList = currentNotes.map(cleanNoteForStorage);
+  const totalVotes = cleanNotesList.reduce((sum, n) => sum + (n.votes || 0), 0);
+
+  // Guardar como mapa de notas para evitar arrays dispersos en Firebase
+  const notesMap: Record<string, any> = {};
+  cleanNotesList.forEach((n, index) => {
+    const key = n.id || `note_${index}`;
+    notesMap[key] = n;
+  });
 
   const sessionData = {
     id: newSessionRef.key || '',
     name: name.trim() || `Taller ${new Date().toLocaleDateString('es-CL')}`,
     createdAt: Date.now(),
-    totalNotes: currentNotes.length,
+    totalNotes: cleanNotesList.length,
     totalVotes,
-    notes: currentNotes,
+    notes: notesMap,
   };
 
   await set(newSessionRef, sessionData);
@@ -283,14 +321,10 @@ export async function restoreArchivedSession(notesToRestore: Note[]): Promise<vo
 
   const payload: Record<string, any> = {};
   for (const n of notesToRestore) {
-    payload[n.id] = {
-      sec: n.sec,
-      text: n.text,
-      ts: n.ts || Date.now(),
-      votes: n.votes || 0,
-      authorId: n.authorId || null,
-      hidden: n.hidden || false,
-    };
+    if (!n) continue;
+    const clean = cleanNoteForStorage(n);
+    const key = clean.id || `restored_${Date.now()}`;
+    payload[key] = clean;
   }
 
   await set(notesRef, payload);
@@ -310,18 +344,24 @@ export function subscribeHistory(onData: (sessions: HistorySession[]) => void): 
       return;
     }
 
-    const sessionsList: HistorySession[] = Object.entries(data).map(([id, val]: [string, any]) => ({
-      id,
-      name: val?.name || 'Sesión archivada',
-      createdAt: typeof val?.createdAt === 'number' ? val.createdAt : Date.now(),
-      totalNotes: typeof val?.totalNotes === 'number' ? val.totalNotes : 0,
-      totalVotes: typeof val?.totalVotes === 'number' ? val.totalVotes : 0,
-      notes: Array.isArray(val?.notes)
-        ? val.notes
-        : val?.notes
-        ? Object.values(val.notes)
-        : [],
-    }));
+    const sessionsList: HistorySession[] = Object.entries(data).map(([id, val]: [string, any]) => {
+      const rawNotes = val?.notes;
+      let parsedNotes: Note[] = [];
+      if (Array.isArray(rawNotes)) {
+        parsedNotes = rawNotes.filter(Boolean);
+      } else if (rawNotes && typeof rawNotes === 'object') {
+        parsedNotes = Object.values(rawNotes);
+      }
+
+      return {
+        id,
+        name: val?.name || 'Sesión archivada',
+        createdAt: typeof val?.createdAt === 'number' ? val.createdAt : Date.now(),
+        totalNotes: typeof val?.totalNotes === 'number' ? val.totalNotes : parsedNotes.length,
+        totalVotes: typeof val?.totalVotes === 'number' ? val.totalVotes : 0,
+        notes: parsedNotes,
+      };
+    });
 
     sessionsList.sort((a, b) => b.createdAt - a.createdAt);
     onData(sessionsList);

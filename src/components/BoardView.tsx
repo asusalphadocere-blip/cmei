@@ -2,7 +2,7 @@ import React from 'react';
 import type { Note, SectionId } from '../types.ts';
 import { SECTIONS } from '../types.ts';
 import { PostIt } from './PostIt.tsx';
-import { Sparkles, Trophy, Users } from 'lucide-react';
+import { Sparkles, Trophy, Users, Lightbulb, Compass } from 'lucide-react';
 
 interface BoardViewProps {
   notes: Note[];
@@ -39,7 +39,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
     .slice(0, 6);
 
   // Total de votos emitidos en columnas 1-4
-  const totalVotesCount = notes
+  const totalVotesCount = displayNotes
     .filter((n) => votableSecIds.includes(n.sec))
     .reduce((acc, curr) => acc + (curr.votes || 0), 0);
 
@@ -75,80 +75,89 @@ export const BoardView: React.FC<BoardViewProps> = ({
     : 'text-[#5f507b]';
 
   return (
-    <div className={`w-full transition-colors duration-300 ${containerBg} ${zoomMode ? 'p-2 sm:p-4 text-base' : 'p-3 sm:p-6 text-sm'}`}>
-      <div className="max-w-[1700px] mx-auto space-y-4 sm:space-y-6">
-
+    <div
+      className={`w-full transition-colors duration-300 ${containerBg} ${
+        zoomMode
+          ? 'p-2 sm:p-4 text-base'
+          : 'p-2.5 sm:p-4 md:p-5 lg:p-6 text-sm'
+      }`}
+    >
+      <div className="max-w-[1700px] mx-auto space-y-4 sm:space-y-5 lg:space-y-6">
         {/* ========================================================= */}
         {/* ENCABEZADO DE LA PIZARRA (Idéntico a la lámina del taller) */}
         {/* ========================================================= */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-indigo-500/20">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 pb-2 border-b border-indigo-500/20">
           <div>
-            <h1 className={`text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight ${titleClass} flex items-center gap-3`}>
+            <h1
+              className={`text-xl sm:text-2xl md:text-3xl lg:text-4xl font-extrabold tracking-tight ${titleClass} flex items-center gap-2 sm:gap-3 flex-wrap`}
+            >
               <span>Escucharnos para construir juntas</span>
               {isDark && (
-                <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-cyan-400 to-violet-500 text-black">
+                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold bg-gradient-to-r from-cyan-400 to-violet-500 text-black">
                   UDP · CMEI
                 </span>
               )}
             </h1>
-            <p className={`text-sm sm:text-base mt-1 font-medium ${subtitleClass}`}>
+            <p className={`text-xs sm:text-sm md:text-base mt-0.5 sm:mt-1 font-medium ${subtitleClass}`}>
               Taller participativo · CMEI · Mujeres en Ingeniería UDP
             </p>
           </div>
 
-          <div className="flex items-center gap-3 self-start md:self-auto">
-            <div className={`px-4 py-2 rounded-2xl text-xs sm:text-sm font-medium border shadow-xs ${
-              isDark
-                ? 'bg-[#182359] border-cyan-400/30 text-cyan-200'
-                : 'bg-[#f2ebf7] border-[#d8c8e8] text-[#3f2f5c]'
-            }`}>
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <div
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl text-[11px] sm:text-xs md:text-sm font-medium border shadow-xs leading-snug ${
+                isDark
+                  ? 'bg-[#182359] border-cyan-400/30 text-cyan-200'
+                  : 'bg-[#f2ebf7] border-[#d8c8e8] text-[#3f2f5c]'
+              }`}
+            >
               Escribe una idea por post-it. Comparte solo lo que quieras contar
             </div>
           </div>
         </header>
 
         {/* ========================================================= */}
-        {/* FILA 1: CUATRO COLUMNAS (1 Intereses, 2 Habilidades, 3 Recursos, 4 Barreras) */}
+        {/* FILA 1: CUATRO COLUMNAS (Optimizado para Tablet 2x2 y Desktop 4 col) */}
         {/* ========================================================= */}
         {(activeFilter === 'all' || activeFilter === 'diagnostico') && (
           <section>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
               {SECTIONS.filter((s) => s.category === 'diagnostico').map((sec) => {
                 const secNotes = notesBySec(sec.id);
                 return (
                   <div
                     key={sec.id}
-                    className={`rounded-2xl flex flex-col min-h-[300px] lg:min-h-[380px] overflow-hidden transition-all duration-200 ${cardBg}`}
+                    className={`rounded-2xl flex flex-col min-h-[220px] sm:min-h-[260px] lg:min-h-[300px] max-h-[480px] overflow-hidden transition-all duration-200 ${cardBg}`}
                   >
-                    {/* Header de columna con número oscuro idéntico a la lámina */}
-                    <div className={`px-4 py-3 flex items-start gap-3 border-b ${headerCardBg}`}>
-                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#1e1338] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                    {/* Header de columna con número oscuro */}
+                    <div className={`px-3 sm:px-4 py-2.5 sm:py-3 flex items-start gap-2.5 sm:gap-3 border-b ${headerCardBg}`}>
+                      <div className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#1e1338] text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-xs">
                         {sec.number}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h2 className="text-base sm:text-lg font-bold leading-tight tracking-tight">
+                        <h2 className="text-sm sm:text-base font-bold leading-tight tracking-tight">
                           {sec.title}
                         </h2>
-                        <p className={`text-xs mt-0.5 ${questionClass}`}>
+                        <p className={`text-[11px] sm:text-xs mt-0.5 leading-snug ${questionClass}`}>
                           {sec.question}
                         </p>
                       </div>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-black/10">
+                      <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full font-semibold bg-black/10 flex-shrink-0">
                         {secNotes.length}
                       </span>
                     </div>
 
                     {/* Contenedor de Post-its */}
-                    <div className="p-3.5 flex-1 overflow-y-auto space-y-3">
+                    <div className="p-2.5 sm:p-3 flex-1 overflow-y-auto space-y-2.5">
                       {secNotes.length === 0 ? (
-                        <div className="h-full min-h-[160px] flex flex-col items-center justify-center text-center p-4 rounded-xl border border-dashed border-slate-400/25 text-slate-400">
-                          <div className="w-16 h-16 rounded-md bg-[#ffe48a]/30 border border-[#e6c86e]/50 flex items-center justify-center text-[#554009] text-xs font-medium rotate-[-2deg] mb-2 shadow-xs">
+                        <div className="h-full min-h-[120px] flex flex-col items-center justify-center text-center p-3 rounded-xl border border-dashed border-slate-400/25 text-slate-400">
+                          <div className="w-14 h-14 rounded-md bg-[#ffe48a]/30 border border-[#e6c86e]/50 flex items-center justify-center text-[#554009] text-[11px] font-medium rotate-[-2deg] mb-1.5 shadow-xs">
                             Escribe aquí...
                           </div>
-                          <p className="text-xs opacity-75">Esperando ideas en vivo</p>
+                          <p className="text-[11px] opacity-75">Esperando ideas en vivo</p>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-1 gap-2.5">
+                        <div className="grid grid-cols-1 gap-2">
                           {secNotes.map((note, index) => (
                             <PostIt
                               key={note.id}
@@ -159,6 +168,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
                               onToggleHide={onToggleHideNote}
                               onBanAuthor={onBanAuthor}
                               theme={theme}
+                              compact={true}
                             />
                           ))}
                         </div>
@@ -174,46 +184,48 @@ export const BoardView: React.FC<BoardViewProps> = ({
         {/* ========================================================= */}
         {/* FILA 2: DOS BLOQUES: "Priorizamos juntas" + "Probar algo pequeño" */}
         {/* ========================================================= */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
-          {/* BLOQUE IZQUIERDO: Priorizamos juntas (5 columnas de ancho en desktop) */}
+        <section className="grid grid-cols-1 xl:grid-cols-12 gap-3 sm:gap-4">
+          {/* BLOQUE IZQUIERDO: Priorizamos juntas */}
           {(activeFilter === 'all' || activeFilter === 'priorizacion') && (
-            <div className={`rounded-2xl flex flex-col min-h-[340px] overflow-hidden ${cardBg} ${
-              activeFilter === 'priorizacion' ? 'lg:col-span-12' : 'lg:col-span-5'
-            }`}>
-              <div className={`px-4 py-3 flex items-center justify-between border-b ${headerCardBg}`}>
+            <div
+              className={`rounded-2xl flex flex-col min-h-[280px] overflow-hidden ${cardBg} ${
+                activeFilter === 'priorizacion' ? 'xl:col-span-12' : 'xl:col-span-5'
+              }`}
+            >
+              <div className={`px-3.5 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between border-b ${headerCardBg}`}>
                 <div className="flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-amber-400" />
-                  <h2 className="text-base sm:text-lg font-bold">Priorizamos juntas</h2>
+                  <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+                  <h2 className="text-sm sm:text-base md:text-lg font-bold">Priorizamos juntas</h2>
                 </div>
-                <div className="text-xs px-2.5 py-1 rounded-full font-semibold bg-indigo-600/20 text-indigo-300">
+                <div className="text-[11px] sm:text-xs px-2.5 py-0.5 rounded-full font-semibold bg-indigo-600/20 text-indigo-300">
                   {totalVotesCount} {totalVotesCount === 1 ? 'voto total' : 'votos totales'}
                 </div>
               </div>
 
-              {/* Subdivisión idéntica a la lámina: Agrupamos ideas aquí | Vota por 2 temas */}
-              <div className="p-3.5 flex-1 grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+              {/* Subdivisión: Agrupamos ideas aquí | Vota por 2 temas */}
+              <div className="p-3 sm:p-3.5 flex-1 grid grid-cols-1 md:grid-cols-12 gap-3">
                 {/* Agrupamos ideas aquí */}
-                <div className="sm:col-span-8 flex flex-col">
+                <div className="md:col-span-7 lg:col-span-7 xl:col-span-8 flex flex-col min-h-[160px]">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider opacity-80">
+                    <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider opacity-80">
                       Agrupamos ideas aquí
                     </span>
-                    <span className="text-[11px] opacity-65">Top más votados</span>
+                    <span className="text-[10px] sm:text-[11px] opacity-65">Top más votados</span>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+                  <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[360px]">
                     {topVotedNotes.length === 0 ? (
-                      <div className="h-full min-h-[140px] flex flex-col items-center justify-center text-center p-4 rounded-xl border border-dashed border-slate-400/25 text-slate-400">
-                        <Sparkles className="w-6 h-6 mb-1 text-amber-400/60 animate-pulse" />
-                        <p className="text-xs">Los post-its con votos de las columnas 1 a 4 aparecerán aquí en vivo</p>
+                      <div className="h-full min-h-[120px] flex flex-col items-center justify-center text-center p-3 rounded-xl border border-dashed border-slate-400/25 text-slate-400">
+                        <Sparkles className="w-5 h-5 mb-1 text-amber-400/60 animate-pulse" />
+                        <p className="text-[11px]">Los post-its más votados de las columnas 1 a 4 aparecerán aquí</p>
                       </div>
                     ) : (
                       topVotedNotes.map((note, index) => (
                         <div key={note.id} className="relative">
-                          <div className="absolute -left-2 top-2 z-10 w-5 h-5 rounded-full bg-slate-900 text-white font-extrabold text-[11px] flex items-center justify-center shadow-md">
+                          <div className="absolute -left-2 top-2 z-10 w-4.5 h-4.5 rounded-full bg-slate-900 text-white font-extrabold text-[10px] flex items-center justify-center shadow-md">
                             {index + 1}
                           </div>
-                          <div className="pl-3">
+                          <div className="pl-2.5">
                             <PostIt
                               note={note}
                               index={index}
@@ -231,30 +243,32 @@ export const BoardView: React.FC<BoardViewProps> = ({
                   </div>
                 </div>
 
-                {/* Vota por 2 temas con matriz de círculos de votación */}
-                <div className={`sm:col-span-4 rounded-xl p-3 flex flex-col items-center justify-between border-l sm:border-l-0 ${innerCardBg}`}>
+                {/* Vota por 2 temas con matriz flexible y responsive */}
+                <div
+                  className={`md:col-span-5 lg:col-span-5 xl:col-span-4 rounded-xl p-2.5 sm:p-3 flex flex-col items-center justify-between border-t md:border-t-0 md:border-l ${innerCardBg}`}
+                >
                   <div className="text-center w-full">
                     <h3 className="text-xs font-bold leading-tight">Vota por 2 temas</h3>
                     <p className="text-[10px] opacity-70 mt-0.5">Stickers de voto</p>
                   </div>
 
-                  {/* Matriz gráfica de 5 columnas x 6 filas idéntica a la lámina de taller */}
-                  <div className="grid grid-cols-5 gap-1.5 my-2.5">
+                  {/* Matriz gráfica de votación con wrap fluido */}
+                  <div className="flex flex-wrap justify-center content-center gap-1.5 max-w-[200px] my-2">
                     {Array.from({ length: 30 }).map((_, i) => {
                       const isFilled = i < totalVotesCount;
                       return (
                         <div
                           key={i}
                           title={isFilled ? `Voto emitido #${i + 1}` : 'Voto disponible'}
-                          className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full transition-all duration-300 flex items-center justify-center ${
+                          className={`w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full transition-all duration-300 flex items-center justify-center ${
                             isFilled
-                              ? 'bg-gradient-to-tr from-cyan-400 to-violet-500 scale-105 shadow-xs border border-white/50 text-[9px] text-slate-900 font-black'
+                              ? 'bg-gradient-to-tr from-cyan-400 to-violet-500 scale-105 shadow-xs border border-white/50 text-[8px] text-slate-900 font-black'
                               : isDark
                               ? 'border-2 border-indigo-400/30 bg-transparent'
                               : 'border-2 border-[#bca9d6] bg-white/60'
                           }`}
                         >
-                          {isFilled && <span className="opacity-90">✓</span>}
+                          {isFilled && <span>✓</span>}
                         </div>
                       );
                     })}
@@ -268,37 +282,42 @@ export const BoardView: React.FC<BoardViewProps> = ({
             </div>
           )}
 
-          {/* BLOQUE DERECHO: Probar algo pequeño (3 columnas: Idea, Prueba, Aprender) */}
+          {/* BLOQUE DERECHO: Probar algo pequeño */}
           {(activeFilter === 'all' || activeFilter === 'ideacion') && (
-            <div className={`rounded-2xl flex flex-col min-h-[340px] overflow-hidden ${cardBg} ${
-              activeFilter === 'ideacion' ? 'lg:col-span-12' : 'lg:col-span-7'
-            }`}>
-              <div className={`px-4 py-3 flex items-center justify-between border-b ${headerCardBg}`}>
+            <div
+              className={`rounded-2xl flex flex-col min-h-[280px] overflow-hidden ${cardBg} ${
+                activeFilter === 'ideacion' ? 'xl:col-span-12' : 'xl:col-span-7'
+              }`}
+            >
+              <div className={`px-3.5 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between border-b ${headerCardBg}`}>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base sm:text-lg font-bold">Probar algo pequeño</h2>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-black/10">
+                  <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+                  <h2 className="text-sm sm:text-base md:text-lg font-bold">Probar algo pequeño</h2>
+                  <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-semibold bg-black/10">
                     Ideatón rápida
                   </span>
                 </div>
               </div>
 
-              {/* 3 Columnas interiores: Idea | Prueba | Aprender con separadores verticales */}
-              <div className="p-3.5 flex-1 grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {/* 3 Columnas interiores responsive */}
+              <div className="p-3 sm:p-3.5 flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                 {SECTIONS.filter((s) => s.category === 'ideacion').map((sec) => {
                   const secNotes = notesBySec(sec.id);
                   return (
                     <div
                       key={sec.id}
-                      className={`rounded-xl p-3 flex flex-col h-full ${innerCardBg}`}
+                      className={`rounded-xl p-2.5 sm:p-3 flex flex-col h-full min-h-[140px] max-h-[380px] ${innerCardBg}`}
                     >
-                      <div className="text-center pb-2.5 border-b border-slate-500/15 mb-2">
-                        <h3 className="text-sm font-bold leading-tight">{sec.title}</h3>
-                        <p className={`text-xs mt-0.5 ${questionClass}`}>{sec.question}</p>
+                      <div className="text-center pb-2 border-b border-slate-500/15 mb-2">
+                        <h3 className="text-xs sm:text-sm font-bold leading-tight">{sec.title}</h3>
+                        <p className={`text-[10px] sm:text-[11px] mt-0.5 leading-snug line-clamp-2 ${questionClass}`}>
+                          {sec.question}
+                        </p>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto space-y-2.5 min-h-[120px]">
+                      <div className="flex-1 overflow-y-auto space-y-2 min-h-[90px]">
                         {secNotes.length === 0 ? (
-                          <div className="h-full flex items-center justify-center text-center p-3 text-slate-400 text-xs italic">
+                          <div className="h-full flex items-center justify-center text-center p-2 text-slate-400 text-[11px] italic">
                             Escribe aquí...
                           </div>
                         ) : (
@@ -326,35 +345,37 @@ export const BoardView: React.FC<BoardViewProps> = ({
         </section>
 
         {/* ========================================================= */}
-        {/* FILA 3: "Seguir conectadas" (3 Cajas horizontales) */}
+        {/* FILA 3: "Seguir conectadas" (3 Cajas horizontales responsive) */}
         {/* ========================================================= */}
         {(activeFilter === 'all' || activeFilter === 'seguimiento') && (
           <section className={`rounded-2xl overflow-hidden ${cardBg}`}>
-            <div className={`px-4 py-3 flex items-center justify-between border-b ${headerCardBg}`}>
+            <div className={`px-3.5 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between border-b ${headerCardBg}`}>
               <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-indigo-400" />
-                <h2 className="text-base sm:text-lg font-bold">Seguir conectadas</h2>
+                <Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />
+                <h2 className="text-sm sm:text-base md:text-lg font-bold">Seguir conectadas</h2>
               </div>
-              <span className="text-xs opacity-75">Compromisos y próximos pasos</span>
+              <span className="text-[11px] sm:text-xs opacity-75">Compromisos y próximos pasos</span>
             </div>
 
-            {/* 3 Cajas horizontales idénticas a la lámina inferior */}
-            <div className="p-3.5 grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            {/* 3 Cajas horizontales responsive */}
+            <div className="p-3 sm:p-3.5 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
               {SECTIONS.filter((s) => s.category === 'seguimiento').map((sec) => {
                 const secNotes = notesBySec(sec.id);
                 return (
                   <div
                     key={sec.id}
-                    className={`rounded-xl p-3.5 flex flex-col min-h-[160px] ${innerCardBg}`}
+                    className={`rounded-xl p-2.5 sm:p-3.5 flex flex-col min-h-[130px] sm:min-h-[150px] max-h-[350px] ${innerCardBg}`}
                   >
                     <div className="pb-2 border-b border-slate-500/15 mb-2">
                       <h3 className="text-xs sm:text-sm font-bold leading-snug">{sec.title}</h3>
-                      <p className={`text-[11px] mt-0.5 ${questionClass}`}>{sec.subtitle}</p>
+                      <p className={`text-[10px] sm:text-[11px] mt-0.5 line-clamp-2 ${questionClass}`}>
+                        {sec.subtitle}
+                      </p>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto space-y-2.5">
+                    <div className="flex-1 overflow-y-auto space-y-2">
                       {secNotes.length === 0 ? (
-                        <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                        <div className="h-full flex items-center justify-center text-slate-400 text-[11px] italic">
                           Espacio abierto para aportes...
                         </div>
                       ) : (
@@ -379,7 +400,6 @@ export const BoardView: React.FC<BoardViewProps> = ({
             </div>
           </section>
         )}
-
       </div>
     </div>
   );
