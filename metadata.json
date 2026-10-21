@@ -1,0 +1,8 @@
+{
+  "name": "Escucharnos para construir juntas",
+  "description": "Tablero colaborativo en tiempo real para el taller participativo (focus group + ideatón) de Mujeres en Ingeniería UDP · CMEI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
