@@ -11,16 +11,32 @@ import {
   Palette,
   ExternalLink,
   PlusCircle,
-  HelpCircle,
   Image as ImageIcon,
+  FileText,
+  Archive,
+  Lock,
+  Unlock,
+  Ban,
+  EyeOff,
 } from 'lucide-react';
-import type { Note, SectionId } from '../types.ts';
+import type { Note, SectionId, BoardSettings, HistorySession } from '../types.ts';
 import { SECTIONS } from '../types.ts';
 import { BoardView } from './BoardView.tsx';
-import { createNote, deleteNote } from '../lib/firebase.ts';
+import { ExecutiveSummaryModal } from './ExecutiveSummaryModal.tsx';
+import { HistoryModal } from './HistoryModal.tsx';
+import {
+  createNote,
+  deleteNote,
+  toggleHideNote,
+  banAuthor,
+  unbanAuthor,
+  setVotingStatus,
+} from '../lib/firebase.ts';
 
 interface FacilitatorPanelProps {
   notes: Note[];
+  settings: BoardSettings;
+  historySessions: HistorySession[];
   onLogout: () => void;
   onGoToParticipantView: () => void;
   isConnected: boolean;
@@ -28,6 +44,8 @@ interface FacilitatorPanelProps {
 
 export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
   notes,
+  settings,
+  historySessions,
   onLogout,
   onGoToParticipantView,
   isConnected,
@@ -40,15 +58,24 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showOriginalImage, setShowOriginalImage] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showBannedModal, setShowBannedModal] = useState(false);
 
-  // Estados para nuevo post-it manual de la facilitadora
+  // Notas para el modal de resumen
+  const [summaryNotes, setSummaryNotes] = useState<Note[]>(notes);
+  const [summarySessionName, setSummarySessionName] = useState<string>('Sesión en vivo actual');
+
+  // Estados para nuevo post-it manual de facilitadora
   const [manualSec, setManualSec] = useState<SectionId>('sec1');
   const [manualText, setManualText] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
   // Métricas
   const totalNotes = notes.length;
+  const hiddenNotesCount = notes.filter((n) => n.hidden).length;
   const totalVotes = notes.reduce((sum, n) => sum + (n.votes || 0), 0);
+  const bannedCount = Object.keys(settings.bannedAuthors || {}).length;
 
   const handleCopyLink = async () => {
     try {
@@ -57,7 +84,6 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 3000);
     } catch {
-      // Fallback manual si clipboard API falla
       const input = document.createElement('input');
       input.value = window.location.origin;
       document.body.appendChild(input);
@@ -77,12 +103,44 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
     }
   };
 
+  const handleToggleHide = async (noteId: string, currentHidden: boolean) => {
+    try {
+      await toggleHideNote(noteId, currentHidden);
+    } catch (err) {
+      console.error('Error al cambiar visibilidad:', err);
+    }
+  };
+
+  const handleBanAuthor = async (authorId: string) => {
+    try {
+      await banAuthor(authorId);
+    } catch (err) {
+      console.error('Error al bloquear autor:', err);
+    }
+  };
+
+  const handleUnbanAuthor = async (authorId: string) => {
+    try {
+      await unbanAuthor(authorId);
+    } catch (err) {
+      console.error('Error al desbloquear autor:', err);
+    }
+  };
+
+  const handleToggleVoting = async () => {
+    try {
+      await setVotingStatus(!settings.votingOpen);
+    } catch (err) {
+      console.error('Error al cambiar estado de votación:', err);
+    }
+  };
+
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualText.trim() || isAdding) return;
     setIsAdding(true);
     try {
-      await createNote(manualSec, manualText.trim());
+      await createNote(manualSec, manualText.trim(), 'facilitadora');
       setManualText('');
       setShowAddModal(false);
     } catch (err) {
@@ -92,8 +150,14 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
     }
   };
 
+  const handleOpenSummary = (notesToSummarize: Note[], name: string) => {
+    setSummaryNotes(notesToSummarize);
+    setSummarySessionName(name);
+    setShowSummaryModal(true);
+  };
+
   const handleExportCSV = () => {
-    const headers = ['ID', 'Sección', 'Título Sección', 'Categoría', 'Votos', 'Fecha', 'Texto'];
+    const headers = ['ID', 'Sección', 'Título Sección', 'Categoría', 'Votos', 'Estado', 'Fecha', 'Texto'];
     const rows = notes.map((n) => {
       const secMeta = SECTIONS.find((s) => s.id === n.sec);
       const dateStr = new Date(n.ts).toLocaleString('es-CL');
@@ -103,6 +167,7 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
         `"${secMeta?.title || ''}"`,
         `"${secMeta?.category || ''}"`,
         n.votes || 0,
+        n.hidden ? '"Oculto"' : '"Visible"',
         `"${dateStr}"`,
         `"${n.text.replace(/"/g, '""')}"`,
       ].join(',');
@@ -157,13 +222,41 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
               </div>
             </div>
 
-            {/* Contadores rápidos */}
-            <div className="flex items-center gap-2 bg-[#121a45] px-3 py-1.5 rounded-xl border border-indigo-800/60 text-xs">
-              <span className="text-slate-400">Total ideas:</span>
-              <span className="font-extrabold text-cyan-300 text-sm">{totalNotes}</span>
-              <span className="text-slate-600">|</span>
-              <span className="text-slate-400">Total votos:</span>
-              <span className="font-extrabold text-violet-300 text-sm">{totalVotes}</span>
+            {/* Contadores y estado de votación */}
+            <div className="flex items-center flex-wrap gap-2">
+              {/* INTERRUPTOR DE VOTACIÓN */}
+              <button
+                onClick={handleToggleVoting}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm ${
+                  settings.votingOpen
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/30'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30'
+                }`}
+                title="Abrir o cerrar la posibilidad de votar para las participantes"
+              >
+                {settings.votingOpen ? (
+                  <>
+                    <Unlock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Votación Abierta</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Votación Cerrada</span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center gap-2 bg-[#121a45] px-3 py-1.5 rounded-xl border border-indigo-800/60 text-xs">
+                <span className="text-slate-400">Ideas:</span>
+                <span className="font-extrabold text-cyan-300 text-sm">{totalNotes}</span>
+                {hiddenNotesCount > 0 && (
+                  <span className="text-amber-400 text-[10px]">({hiddenNotesCount} ocultas)</span>
+                )}
+                <span className="text-slate-600">|</span>
+                <span className="text-slate-400">Votos:</span>
+                <span className="font-extrabold text-violet-300 text-sm">{totalVotes}</span>
+              </div>
             </div>
 
             {/* Acciones principales */}
@@ -181,9 +274,29 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
                 ) : (
                   <>
                     <Copy className="w-3.5 h-3.5" />
-                    <span>Copiar enlace participantes</span>
+                    <span>Copiar enlace</span>
                   </>
                 )}
+              </button>
+
+              {/* Botón Resumen Ejecutivo e Informe */}
+              <button
+                onClick={() => handleOpenSummary(notes, 'Sesión en vivo actual')}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-md cursor-pointer transition-colors"
+                title="Generar resumen de hallazgos para informes"
+              >
+                <FileText className="w-3.5 h-3.5 text-cyan-300" />
+                <span>Resumen Ejecutivo</span>
+              </button>
+
+              {/* Botón Históricos y Archivar */}
+              <button
+                onClick={() => setShowHistoryModal(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium bg-[#182359] hover:bg-[#202e75] text-slate-200 border border-indigo-700/60 cursor-pointer transition-colors"
+                title="Gestionar histórico de sesiones y archivar"
+              >
+                <Archive className="w-3.5 h-3.5 text-amber-300" />
+                <span>Historial ({historySessions.length})</span>
               </button>
 
               {/* Botón agregar nota manual */}
@@ -196,7 +309,19 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
                 <span className="hidden sm:inline">Agregar idea</span>
               </button>
 
-              {/* Selector de tema: Lámina original vs Modo Noche */}
+              {/* Ver participantes bloqueadas si hay */}
+              {bannedCount > 0 && (
+                <button
+                  onClick={() => setShowBannedModal(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-600/50 cursor-pointer transition-colors"
+                  title="Gestionar participantes bloqueadas"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>{bannedCount} bloqueada(s)</span>
+                </button>
+              )}
+
+              {/* Selector de tema */}
               <button
                 onClick={() => setTheme((prev) => (prev === 'canvas' ? 'dark' : 'canvas'))}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium bg-[#182359] hover:bg-[#202e75] text-slate-200 border border-indigo-700/60 cursor-pointer transition-colors"
@@ -204,7 +329,7 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
               >
                 <Palette className="w-3.5 h-3.5 text-violet-400" />
                 <span className="hidden md:inline">
-                  {theme === 'canvas' ? 'Tema Lámina Canva' : 'Tema Nocturno UDP'}
+                  {theme === 'canvas' ? 'Lámina Canva' : 'Tema Nocturno'}
                 </span>
               </button>
 
@@ -235,7 +360,7 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
                 title="Descargar todas las ideas del taller en CSV"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Exportar CSV</span>
+                <span className="hidden sm:inline">CSV</span>
               </button>
 
               {/* Vista participante */}
@@ -245,7 +370,7 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
                 title="Ver cómo lo ven las participantes"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span className="hidden xl:inline">Ver como participante</span>
+                <span className="hidden xl:inline">Participante</span>
               </button>
 
               {/* Salir */}
@@ -259,7 +384,7 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
             </div>
           </div>
 
-          {/* BARRA DE FASES DEL TALLER (Permite a la facilitadora enfocar una sección según el horario) */}
+          {/* BARRA DE FASES DEL TALLER */}
           <div className="max-w-[1700px] mx-auto mt-2 pt-2 border-t border-indigo-950/70 flex items-center justify-between overflow-x-auto text-xs pb-1">
             <div className="flex items-center gap-1 text-slate-400">
               <Filter className="w-3.5 h-3.5 text-cyan-400" />
@@ -322,7 +447,7 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
         </header>
       )}
 
-      {/* BOTÓN FLOTANTE PARA SALIR DE MODO ZOOM */}
+      {/* BOTÓN FLOTANTE EN MODO ZOOM */}
       {zoomMode && (
         <div className="fixed top-3 right-4 z-50 flex items-center gap-2 bg-[#0a0f2e]/90 backdrop-blur-md p-1.5 rounded-2xl border border-indigo-700/60 shadow-xl">
           <button
@@ -342,7 +467,81 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
         </div>
       )}
 
-      {/* MODAL / OVERLAY DE LA PIZARRA DE DISEÑO ORIGINAL PARA COMPARAR */}
+      {/* MODAL DE RESUMEN EJECUTIVO */}
+      {showSummaryModal && (
+        <ExecutiveSummaryModal
+          notes={summaryNotes}
+          sessionName={summarySessionName}
+          onClose={() => setShowSummaryModal(false)}
+        />
+      )}
+
+      {/* MODAL DE HISTORIAL Y ARCHIVO */}
+      {showHistoryModal && (
+        <HistoryModal
+          currentNotes={notes}
+          historySessions={historySessions}
+          onClose={() => setShowHistoryModal(false)}
+          onOpenSummaryForSession={(histNotes, histName) => {
+            setShowHistoryModal(false);
+            handleOpenSummary(histNotes, histName);
+          }}
+        />
+      )}
+
+      {/* MODAL DE GESTIÓN DE PARTICIPANTES BLOQUEADAS */}
+      {showBannedModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-[#121a45] rounded-3xl p-6 max-w-md w-full border border-indigo-700 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Ban className="w-5 h-5 text-rose-400" />
+                <span>Participantes Bloqueadas</span>
+              </h3>
+              <button
+                onClick={() => setShowBannedModal(false)}
+                className="text-slate-400 hover:text-white font-bold px-2 py-1 rounded-lg bg-white/10 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300">
+              Estas participantes no pueden enviar nuevas ideas ni emitir votos. Puedes desbloquearlas en cualquier momento:
+            </p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {Object.keys(settings.bannedAuthors || {}).map((bannedId) => (
+                <div
+                  key={bannedId}
+                  className="p-2.5 rounded-xl bg-[#0a0f2e] border border-indigo-950 flex items-center justify-between text-xs"
+                >
+                  <span className="font-mono text-slate-300 truncate max-w-[200px]">
+                    {bannedId}
+                  </span>
+                  <button
+                    onClick={() => handleUnbanAuthor(bannedId)}
+                    className="px-2.5 py-1 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-white font-semibold text-[11px] cursor-pointer"
+                  >
+                    Desbloquear
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowBannedModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/10 text-white hover:bg-white/20 cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PIZARRA ORIGINAL CANVA */}
       {showOriginalImage && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-[#121a45] rounded-3xl p-5 max-w-4xl w-full border border-indigo-700 shadow-2xl space-y-4">
@@ -369,7 +568,7 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
         </div>
       )}
 
-      {/* MODAL PARA AGREGAR NOTA MANUALMENTE POR LA FACILITADORA */}
+      {/* MODAL AGREGAR IDEA MANUAL */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-[#121a45] rounded-3xl p-6 max-w-lg w-full border border-indigo-700 shadow-2xl space-y-4">
@@ -449,6 +648,8 @@ export const FacilitatorPanel: React.FC<FacilitatorPanelProps> = ({
           notes={notes}
           isFacilitator={true}
           onDeleteNote={handleDelete}
+          onToggleHideNote={handleToggleHide}
+          onBanAuthor={handleBanAuthor}
           theme={theme}
           zoomMode={zoomMode}
           activeFilter={activeFilter}

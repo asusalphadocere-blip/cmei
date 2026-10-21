@@ -8,6 +8,8 @@ interface BoardViewProps {
   notes: Note[];
   isFacilitator?: boolean;
   onDeleteNote?: (noteId: string) => void;
+  onToggleHideNote?: (noteId: string, currentHidden: boolean) => void;
+  onBanAuthor?: (authorId: string) => void;
   theme?: 'canvas' | 'dark';
   zoomMode?: boolean;
   activeFilter?: 'all' | 'diagnostico' | 'priorizacion' | 'ideacion' | 'seguimiento';
@@ -17,16 +19,21 @@ export const BoardView: React.FC<BoardViewProps> = ({
   notes,
   isFacilitator = false,
   onDeleteNote,
+  onToggleHideNote,
+  onBanAuthor,
   theme = 'canvas',
   zoomMode = false,
   activeFilter = 'all',
 }) => {
+  // Para participantes comunes, las notas ocultas se excluyen del tablero
+  const displayNotes = isFacilitator ? notes : notes.filter((n) => !n.hidden);
+
   // Notas agrupadas por sección
-  const notesBySec = (secId: SectionId) => notes.filter((n) => n.sec === secId);
+  const notesBySec = (secId: SectionId) => displayNotes.filter((n) => n.sec === secId);
 
   // Notas más votadas de las columnas 1 a 4 (Diagnóstico) para "Priorizamos juntas"
   const votableSecIds: SectionId[] = ['sec1', 'sec2', 'sec3', 'sec4'];
-  const topVotedNotes = [...notes]
+  const topVotedNotes = [...displayNotes]
     .filter((n) => votableSecIds.includes(n.sec) && n.votes > 0)
     .sort((a, b) => b.votes - a.votes)
     .slice(0, 6);
@@ -149,6 +156,8 @@ export const BoardView: React.FC<BoardViewProps> = ({
                               index={index}
                               isFacilitator={isFacilitator}
                               onDelete={onDeleteNote}
+                              onToggleHide={onToggleHideNote}
+                              onBanAuthor={onBanAuthor}
                               theme={theme}
                             />
                           ))}
@@ -210,6 +219,8 @@ export const BoardView: React.FC<BoardViewProps> = ({
                               index={index}
                               isFacilitator={isFacilitator}
                               onDelete={onDeleteNote}
+                              onToggleHide={onToggleHideNote}
+                              onBanAuthor={onBanAuthor}
                               theme={theme}
                               compact={true}
                             />
@@ -298,6 +309,8 @@ export const BoardView: React.FC<BoardViewProps> = ({
                               index={index}
                               isFacilitator={isFacilitator}
                               onDelete={onDeleteNote}
+                              onToggleHide={onToggleHideNote}
+                              onBanAuthor={onBanAuthor}
                               theme={theme}
                               compact={true}
                             />
@@ -352,6 +365,8 @@ export const BoardView: React.FC<BoardViewProps> = ({
                             index={index}
                             isFacilitator={isFacilitator}
                             onDelete={onDeleteNote}
+                            onToggleHide={onToggleHideNote}
+                            onBanAuthor={onBanAuthor}
                             theme={theme}
                             compact={true}
                           />

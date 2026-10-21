@@ -4,8 +4,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import type { Note } from './types.ts';
-import { subscribeNotes, subscribeConnectionState } from './lib/firebase.ts';
+import type { Note, BoardSettings, HistorySession } from './types.ts';
+import {
+  subscribeNotes,
+  subscribeConnectionState,
+  subscribeSettings,
+  subscribeHistory,
+} from './lib/firebase.ts';
 import { useFacilitatorAuth } from './lib/useFacilitatorAuth.ts';
 import { ParticipantView } from './components/ParticipantView.tsx';
 import { FacilitatorPanel } from './components/FacilitatorPanel.tsx';
@@ -14,6 +19,11 @@ import { PinModal } from './components/PinModal.tsx';
 export default function App() {
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [settings, setSettings] = useState<BoardSettings>({
+    votingOpen: true,
+    bannedAuthors: {},
+  });
+  const [historySessions, setHistorySessions] = useState<HistorySession[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [firebaseError, setFirebaseError] = useState<string | null>(null);
 
@@ -58,9 +68,19 @@ export default function App() {
       setIsConnected(connected);
     });
 
+    const unsubscribeSettings = subscribeSettings((newSettings) => {
+      setSettings(newSettings);
+    });
+
+    const unsubscribeHistory = subscribeHistory((sessions) => {
+      setHistorySessions(sessions);
+    });
+
     return () => {
       unsubscribeNotes();
       unsubscribeConn();
+      unsubscribeSettings();
+      unsubscribeHistory();
     };
   }, []);
 
@@ -85,6 +105,8 @@ export default function App() {
     return (
       <FacilitatorPanel
         notes={notes}
+        settings={settings}
+        historySessions={historySessions}
         isConnected={isConnected}
         onLogout={() => {
           logout();
@@ -99,6 +121,7 @@ export default function App() {
   return (
     <ParticipantView
       notes={notes}
+      settings={settings}
       onGoToPanel={() => navigateTo('/panel')}
     />
   );

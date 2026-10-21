@@ -40,6 +40,11 @@ export function useVotes() {
     return true;
   };
 
+  const unrecordVote = (noteId: string) => {
+    setVotedNoteIds((prev) => prev.filter((id) => id !== noteId));
+    return true;
+  };
+
   const resetLocalVotes = () => {
     setVotedNoteIds([]);
     try {
@@ -57,6 +62,7 @@ export function useVotes() {
     hasVoted,
     canVote,
     recordVote,
+    unrecordVote,
     resetLocalVotes,
   };
 }

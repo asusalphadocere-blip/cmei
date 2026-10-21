@@ -4,6 +4,22 @@ export interface Note {
   text: string;
   ts: number;
   votes: number;
+  authorId?: string;
+  hidden?: boolean;
+}
+
+export interface BoardSettings {
+  votingOpen: boolean;
+  bannedAuthors: Record<string, boolean>;
+}
+
+export interface HistorySession {
+  id: string;
+  name: string;
+  createdAt: number;
+  totalNotes: number;
+  totalVotes: number;
+  notes: Note[];
 }
 
 export type SectionCategory = 'diagnostico' | 'ideacion' | 'seguimiento';

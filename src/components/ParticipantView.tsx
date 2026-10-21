@@ -10,20 +10,30 @@ import {
   ShieldCheck,
   AlertCircle,
   HelpCircle,
+  Undo2,
+  Lock,
+  Trash2,
+  Ban,
 } from 'lucide-react';
-import type { Note, SectionId } from '../types.ts';
+import type { Note, SectionId, BoardSettings } from '../types.ts';
 import { SECTIONS, POSTIT_COLORS } from '../types.ts';
-import { createNote, voteNote } from '../lib/firebase.ts';
+import { createNote, voteNote, unvoteNote, deleteNote } from '../lib/firebase.ts';
 import { useVotes } from '../lib/useVotes.ts';
+import { useAuthor } from '../lib/useAuthor.ts';
 import { PostIt } from './PostIt.tsx';
 import { BoardView } from './BoardView.tsx';
 
 interface ParticipantViewProps {
   notes: Note[];
+  settings: BoardSettings;
   onGoToPanel?: () => void;
 }
 
-export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToPanel }) => {
+export const ParticipantView: React.FC<ParticipantViewProps> = ({
+  notes,
+  settings,
+  onGoToPanel,
+}) => {
   const [activeTab, setActiveTab] = useState<'aportar' | 'votar' | 'tablero'>('aportar');
   const [selectedSec, setSelectedSec] = useState<SectionId>('sec1');
   const [text, setText] = useState('');
@@ -31,23 +41,44 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [filterSecVotar, setFilterSecVotar] = useState<SectionId | 'todas'>('todas');
+  const [confirmDeleteNoteId, setConfirmDeleteNoteId] = useState<string | null>(null);
 
-  const { votesRemaining, votesUsed, maxVotes, hasVoted, canVote, recordVote } = useVotes();
+  const {
+    votesRemaining,
+    votesUsed,
+    maxVotes,
+    hasVoted,
+    canVote,
+    recordVote,
+    unrecordVote,
+  } = useVotes();
+
+  const { authorId, isMyNote, recordMyNote, removeMyNote, isBanned } = useAuthor(
+    settings.bannedAuthors
+  );
 
   const currentSection = SECTIONS.find((s) => s.id === selectedSec) || SECTIONS[0];
 
+  // Excluir notas ocultadas por la facilitadora para las participantes
+  const visibleNotes = notes.filter((n) => !n.hidden);
+
   // Post-its de la sección seleccionada en Aportar
-  const currentSecNotes = notes.filter((n) => n.sec === selectedSec);
+  const currentSecNotes = visibleNotes.filter((n) => n.sec === selectedSec);
 
   // Post-its de las secciones 1 a 4 para Votar, ordenados por votos descendente
   const votableSecIds: SectionId[] = ['sec1', 'sec2', 'sec3', 'sec4'];
-  const votableNotes = notes
+  const votableNotes = visibleNotes
     .filter((n) => votableSecIds.includes(n.sec))
     .filter((n) => (filterSecVotar === 'todas' ? true : n.sec === filterSecVotar))
     .sort((a, b) => b.votes - a.votes);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isBanned) {
+      setSubmitError('Tu acceso para participar ha sido restringido por la facilitadora.');
+      return;
+    }
+
     const clean = text.trim();
     if (!clean) {
       setSubmitError('Por favor escribe tu idea antes de enviar');
@@ -62,12 +93,15 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
     setSubmitError(null);
 
     try {
-      await createNote(selectedSec, clean);
+      const newKey = await createNote(selectedSec, clean, authorId);
+      if (newKey) {
+        recordMyNote(newKey);
+      }
       setText('');
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3500);
 
-      // Pequeño confeti táctil de celebración
+      // Confeti sutil de celebración
       try {
         confetti({
           particleCount: 28,
@@ -87,6 +121,8 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
   };
 
   const handleVote = async (noteId: string) => {
+    if (isBanned) return;
+    if (!settings.votingOpen) return;
     if (!canVote(noteId)) return;
 
     try {
@@ -105,6 +141,26 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
       }
     } catch (err) {
       console.error('Error al votar:', err);
+    }
+  };
+
+  const handleUnvote = async (noteId: string) => {
+    if (!settings.votingOpen) return;
+    try {
+      unrecordVote(noteId);
+      await unvoteNote(noteId);
+    } catch (err) {
+      console.error('Error al retirar voto:', err);
+    }
+  };
+
+  const handleDeleteMyOwnNote = async (noteId: string) => {
+    try {
+      await deleteNote(noteId);
+      removeMyNote(noteId);
+      setConfirmDeleteNoteId(null);
+    } catch (err) {
+      console.error('Error al borrar nota propia:', err);
     }
   };
 
@@ -144,6 +200,14 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
         </div>
       </header>
 
+      {/* BANNER SI LA PARTICIPANTE FUE RESTRINGIDA */}
+      {isBanned && (
+        <div className="bg-rose-950 border-b border-rose-500/60 p-3 text-center text-xs text-rose-200 flex items-center justify-center gap-2">
+          <Ban className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          <span>Tu participación ha sido restringida por la facilitadora del taller.</span>
+        </div>
+      )}
+
       {/* ========================================================= */}
       {/* PESTAÑAS PRINCIPALES (Mobile first, táctiles grandes) */}
       {/* ========================================================= */}
@@ -171,7 +235,7 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
           >
             <Vote className="w-4 h-4" />
             <span>Votar</span>
-            {votesRemaining > 0 && (
+            {votesRemaining > 0 && settings.votingOpen && (
               <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center font-bold">
                 {votesRemaining}
               </span>
@@ -214,7 +278,7 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
               </div>
             </div>
 
-            {/* SELECCIÓN DE SECCIÓN CON CHIPS GRANDES */}
+            {/* SELECCIÓN DE SECCIÓN */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
                 <span>1. Elige la sección del taller:</span>
@@ -227,7 +291,7 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
                 </span>
               </label>
 
-              {/* Categorías agrupadas */}
+              {/* Categorías */}
               <div className="space-y-2">
                 <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider pl-1">
                   Diagnóstico (Votable más tarde)
@@ -277,7 +341,7 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
               </div>
             </div>
 
-            {/* CAJA DE PREGUNTA GUÍA */}
+            {/* PREGUNTA ORIENTADORA */}
             <div className="p-3.5 rounded-2xl bg-[#141e54] border border-indigo-700/40 space-y-1">
               <div className="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
                 <HelpCircle className="w-3.5 h-3.5" />
@@ -291,7 +355,7 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
               </p>
             </div>
 
-            {/* FORMULARIO DE APORTE */}
+            {/* FORMULARIO DE POST-IT */}
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
@@ -309,7 +373,7 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
                   </span>
                 </div>
 
-                {/* Previsualización del post-it en tiempo real */}
+                {/* Previsualización del post-it */}
                 <div
                   style={{
                     backgroundColor: previewColor.bg,
@@ -325,11 +389,11 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
                     maxLength={280}
                     rows={4}
                     className="w-full bg-transparent border-none outline-none resize-none text-sm sm:text-base placeholder:text-stone-600 font-normal leading-relaxed selection:bg-black/20"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isBanned}
                   />
                   <div className="mt-2 pt-2 border-t border-black/10 flex items-center justify-between text-[11px] opacity-70">
                     <span>💡 1 idea por post-it</span>
-                    <span>Anónimo</span>
+                    <span>Anónimo · Puedes borrar tu post-it</span>
                   </div>
                 </div>
               </div>
@@ -348,10 +412,9 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
                 </div>
               )}
 
-              {/* BOTÓN GRANDE PARA UNA MANO */}
               <button
                 type="submit"
-                disabled={isSubmitting || !text.trim()}
+                disabled={isSubmitting || !text.trim() || isBanned}
                 className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-cyan-400 via-sky-400 to-violet-500 hover:from-cyan-300 hover:to-violet-400 text-slate-950 font-black text-base shadow-lg shadow-cyan-500/20 active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
@@ -365,7 +428,7 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
               </button>
             </form>
 
-            {/* FEED EN VIVO DE LA SECCIÓN SELECCIONADA */}
+            {/* FEED EN VIVO DE LA SECCIÓN */}
             <div className="pt-4 border-t border-indigo-900/50 space-y-2.5">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -380,20 +443,21 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {currentSecNotes.slice(0, 6).map((note, index) => (
-                    <PostIt
-                      key={note.id}
-                      note={note}
-                      index={index}
-                      theme="dark"
-                      compact={true}
-                    />
-                  ))}
-                  {currentSecNotes.length > 6 && (
-                    <p className="text-center text-xs text-slate-500 pt-1">
-                      + {currentSecNotes.length - 6} post-its más en esta sección
-                    </p>
-                  )}
+                  {currentSecNotes.slice(0, 8).map((note, index) => {
+                    const mine = isMyNote(note);
+                    return (
+                      <div key={note.id} className="relative">
+                        <PostIt
+                          note={note}
+                          index={index}
+                          theme="dark"
+                          compact={true}
+                          isMyNote={mine}
+                          onDelete={mine ? handleDeleteMyOwnNote : undefined}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -405,44 +469,62 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
         {/* ======================================================= */}
         {activeTab === 'votar' && (
           <div className="space-y-4 animate-in fade-in duration-200">
-            {/* TARJETA DE ESTADO DE VOTOS DE LA PARTICIPANTE */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-[#172052] to-[#25184a] border border-violet-500/30 shadow-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-violet-300 uppercase tracking-wider">
-                  Tus votos para el taller
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-violet-500/20 text-violet-200 border border-violet-400/30">
-                  {votesRemaining} de {maxVotes} disponibles
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex gap-1.5">
-                  {Array.from({ length: maxVotes }).map((_, i) => (
-                    <div
-                      key={i}
-                      className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
-                        i < votesUsed
-                          ? 'bg-gradient-to-tr from-cyan-400 to-violet-500 text-slate-900 shadow-sm'
-                          : 'border-2 border-dashed border-violet-400/40 text-violet-400/40'
-                      }`}
-                    >
-                      {i < votesUsed ? '✓' : i + 1}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="text-xs text-slate-300 leading-tight">
-                  {votesRemaining === 2 ? (
-                    <p>Tienes <strong className="text-cyan-300">2 votos</strong>. Elige las 2 ideas de las columnas 1 a 4 que te parezcan más urgentes o valiosas.</p>
-                  ) : votesRemaining === 1 ? (
-                    <p>Te queda <strong className="text-cyan-300">1 voto</strong>. Elige una idea más.</p>
-                  ) : (
-                    <p className="text-emerald-300 font-semibold">¡Has usado tus 2 votos! Gracias por participar en la priorización.</p>
-                  )}
+            {/* TARJETA DE ESTADO DE VOTACIÓN */}
+            {!settings.votingOpen ? (
+              <div className="p-4 rounded-2xl bg-amber-950/70 border border-amber-500/50 text-amber-200 text-xs flex items-center gap-3">
+                <Lock className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                <div>
+                  <p className="font-bold">La votación está cerrada temporalmente</p>
+                  <p className="text-[11px] text-amber-300/80 mt-0.5">
+                    La facilitadora abrirá la votación durante la fase de priorización.
+                  </p>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-[#172052] to-[#25184a] border border-violet-500/30 shadow-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-violet-300 uppercase tracking-wider">
+                    Tus votos para el taller
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-violet-500/20 text-violet-200 border border-violet-400/30">
+                    {votesRemaining} de {maxVotes} disponibles
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1.5">
+                    {Array.from({ length: maxVotes }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
+                          i < votesUsed
+                            ? 'bg-gradient-to-tr from-cyan-400 to-violet-500 text-slate-950 shadow-sm'
+                            : 'border-2 border-dashed border-violet-400/40 text-violet-400/40'
+                        }`}
+                      >
+                        {i < votesUsed ? '✓' : i + 1}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="text-xs text-slate-300 leading-tight">
+                    {votesRemaining === 2 ? (
+                      <p>
+                        Tienes <strong className="text-cyan-300">2 votos</strong>. Elige las 2 ideas prioritarias de las columnas 1 a 4.
+                      </p>
+                    ) : votesRemaining === 1 ? (
+                      <p>
+                        Te queda <strong className="text-cyan-300">1 voto</strong>. Puedes cambiar tu voto actual o elegir una segunda idea.
+                      </p>
+                    ) : (
+                      <p className="text-emerald-300 font-semibold">
+                        Has usado tus 2 votos. Puedes cambiar cualquiera si lo deseas antes del cierre.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* FILTROS POR COLUMNAS 1 A 4 */}
             <div className="space-y-1.5">
@@ -486,7 +568,8 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
                 votableNotes.map((note, index) => {
                   const secMeta = SECTIONS.find((s) => s.id === note.sec);
                   const isVotedByMe = hasVoted(note.id);
-                  const canVoteThis = canVote(note.id);
+                  const canVoteThis = canVote(note.id) && settings.votingOpen;
+                  const mine = isMyNote(note);
 
                   return (
                     <div
@@ -494,10 +577,17 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
                       className="p-3.5 rounded-2xl bg-[#121a45] border border-indigo-900/60 shadow-md space-y-2.5 transition-all hover:border-indigo-700"
                     >
                       <div className="flex items-center justify-between text-xs">
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0a0f2e] text-cyan-300 font-semibold text-[11px]">
-                          <span>{secMeta?.number || '•'}</span>
-                          <span>{secMeta?.title}</span>
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0a0f2e] text-cyan-300 font-semibold text-[11px]">
+                            <span>{secMeta?.number || '•'}</span>
+                            <span>{secMeta?.title}</span>
+                          </span>
+                          {mine && (
+                            <span className="text-[10px] bg-indigo-600/40 text-indigo-200 px-1.5 py-0.5 rounded">
+                              Tu idea
+                            </span>
+                          )}
+                        </div>
 
                         <div className="flex items-center gap-1 text-amber-400 font-bold text-xs">
                           <span>★ {note.votes}</span>
@@ -512,15 +602,40 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
                       </p>
 
                       <div className="pt-2 border-t border-indigo-950/70 flex items-center justify-between">
-                        <span className="text-[11px] text-slate-400">
-                          #{index + 1} en el ranking
-                        </span>
-
-                        {isVotedByMe ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Votado</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-400">
+                            #{index + 1} en el ranking
                           </span>
+                          {mine && (
+                            <button
+                              onClick={() => handleDeleteMyOwnNote(note.id)}
+                              className="text-[11px] text-rose-400 hover:text-rose-300 inline-flex items-center gap-1 cursor-pointer"
+                              title="Borrar mi post-it"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Borrar mi idea</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* ACCIONES DE VOTO */}
+                        {isVotedByMe ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Votado</span>
+                            </span>
+                            {settings.votingOpen && (
+                              <button
+                                onClick={() => handleUnvote(note.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-xs font-semibold cursor-pointer transition-colors"
+                                title="Cambiar mi voto"
+                              >
+                                <Undo2 className="w-3 h-3" />
+                                <span>Cambiar</span>
+                              </button>
+                            )}
+                          </div>
                         ) : canVoteThis ? (
                           <button
                             onClick={() => handleVote(note.id)}
@@ -531,7 +646,7 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
                           </button>
                         ) : (
                           <span className="text-[11px] text-slate-500 italic">
-                            Sin votos restantes
+                            {!settings.votingOpen ? 'Votación cerrada' : 'Sin votos disponibles'}
                           </span>
                         )}
                       </div>
@@ -551,13 +666,13 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
             <div className="p-3 rounded-2xl bg-[#121a45] border border-indigo-900/50 text-xs text-slate-300 flex items-center justify-between">
               <span>Tablero colaborativo grupal en tiempo real</span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
-                {notes.length} post-its en total
+                {visibleNotes.length} post-its en total
               </span>
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-indigo-900 shadow-xl">
               <BoardView
-                notes={notes}
+                notes={visibleNotes}
                 theme="dark"
                 isFacilitator={false}
               />
@@ -571,7 +686,9 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({ notes, onGoToP
       {/* ========================================================= */}
       <footer className="mt-8 border-t border-indigo-950 py-4 px-4 text-center text-xs text-slate-500">
         <p>Mujeres en Ingeniería UDP · CMEI · 21 de octubre, 13:00–14:30</p>
-        <p className="text-[11px] text-slate-600 mt-0.5">Tablero colaborativo anónimo para ideación participativa</p>
+        <p className="text-[11px] text-slate-600 mt-0.5">
+          Tablero colaborativo anónimo para ideación participativa
+        </p>
       </footer>
     </div>
   );

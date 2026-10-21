@@ -3,7 +3,7 @@
     "notes": {
       ".read": true,
       "$noteId": {
-        ".write": "(!data.exists() && newData.exists() && newData.hasChildren(['sec', 'text', 'ts', 'votes']) && newData.child('votes').val() === 0 && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 280 && newData.child('sec').isString()) || (data.exists() && newData.exists() && newData.child('votes').val() === data.child('votes').val() + 1 && newData.child('text').val() === data.child('text').val() && newData.child('sec').val() === data.child('sec').val() && newData.child('ts').val() === data.child('ts').val()) || (data.exists() && !newData.exists())",
+        ".write": true,
         "sec": {
           ".validate": "newData.isString()"
         },
@@ -16,14 +16,21 @@
         "votes": {
           ".validate": "newData.isNumber() && newData.val() >= 0"
         },
-        "$other": {
-          ".validate": false
+        "authorId": {
+          ".validate": "newData.isString()"
+        },
+        "hidden": {
+          ".validate": "newData.isBoolean()"
         }
       }
     },
-    "$other": {
-      ".read": false,
-      ".write": false
+    "settings": {
+      ".read": true,
+      ".write": true
+    },
+    "history": {
+      ".read": true,
+      ".write": true
     }
   }
 }
